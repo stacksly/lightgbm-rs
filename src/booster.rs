@@ -319,6 +319,11 @@ impl Booster {
     }
 }
 
+// LGBM_BoosterPredictForMat is always thread-safe
+// https://github.com/Microsoft/LightGBM/issues/666#issuecomment-312254519
+unsafe impl Send for Booster {}
+unsafe impl Sync for Booster {}
+
 impl Drop for Booster {
     fn drop(&mut self) {
         lgbm_call!(lightgbm_sys::LGBM_BoosterFree(self.handle))
