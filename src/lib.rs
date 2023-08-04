@@ -6,9 +6,9 @@ extern crate serde_json;
 extern crate polars;
 
 macro_rules! lgbm_call {
-    ($x:expr) => {
-        Error::check_return_value(unsafe { $x })
-    };
+	($x:expr) => {
+		Error::check_return_value(unsafe { $x })
+	};
 }
 
 mod error;
