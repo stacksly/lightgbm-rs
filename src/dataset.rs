@@ -90,15 +90,16 @@ impl Dataset {
 		}
 		let feature_length = data_length / n_rows;
 
-		let data_len = data_length
-			.try_into()
-			.map_err(|_| Error::new("data length doesn't fit into an i32"))?;
 		let nrow = data_length
 			.try_into()
 			.map_err(|_| Error::new("number of rows doesn't fit into an i32"))?;
 		let ncol = feature_length
 			.try_into()
 			.map_err(|_| Error::new("number of columns doesn't fit into an i32"))?;
+		let label_len = label
+			.len()
+			.try_into()
+			.map_err(|_| Error::new("label length doesn't fit into an i32"))?;
 
 		let params =
 			CString::new("").map_err(|e| Error::from_other("failed to make cstring", e))?;
@@ -125,7 +126,7 @@ impl Dataset {
 			handle,
 			label_str.as_ptr() as *const c_char,
 			label.as_ptr() as *const c_void,
-			data_len,
+			label_len,
 			lightgbm_sys::C_API_DTYPE_FLOAT32
 		))?;
 
