@@ -1,7 +1,3 @@
-extern crate libc;
-extern crate lightgbm_sys;
-extern crate serde_json;
-
 #[cfg(feature = "dataframe")]
 extern crate polars;
 
@@ -12,10 +8,10 @@ macro_rules! lgbm_call {
 }
 
 mod error;
-pub use error::{Error, Result};
+pub use crate::error::{Error, Result};
 
 mod dataset;
-pub use dataset::Dataset;
+pub use crate::dataset::Dataset;
 
 mod booster;
-pub use booster::Booster;
+pub use crate::booster::Booster;

@@ -3,6 +3,7 @@ name = "lightgbm"
 version = "0.2.3"
 authors = ["vaaaaanquish <6syun9@gmail.com>"]
 license = "MIT"
+edition = "2021"
 repository = "https://github.com/vaaaaanquish/LightGBM"
 description = "Machine learning using LightGBM"
 readme = "README.md"
