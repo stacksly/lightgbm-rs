@@ -18,15 +18,20 @@ use crate::{Error, Result};
 /// ```
 /// use lightgbm::Dataset;
 ///
-/// let data = vec![
-/// 	vec![1.0, 0.1, 0.2, 0.1],
-/// 	vec![0.7, 0.4, 0.5, 0.1],
-/// 	vec![0.9, 0.8, 0.5, 0.1],
-/// 	vec![0.2, 0.2, 0.8, 0.7],
-/// 	vec![0.1, 0.7, 1.0, 0.9],
+/// let data = &[
+/// 	[1.0, 0.1, 0.2, 0.1],
+/// 	[0.7, 0.4, 0.5, 0.1],
+/// 	[0.9, 0.8, 0.5, 0.1],
+/// 	[0.2, 0.2, 0.8, 0.7],
+/// 	[0.1, 0.7, 1.0, 0.9],
 /// ];
-/// let label = vec![0.0, 0.0, 0.0, 1.0, 1.0];
-/// let dataset = Dataset::from_mat(data, label).unwrap();
+/// let label = &[0.0, 0.0, 0.0, 1.0, 1.0];
+/// let dataset = Dataset::from_mat(
+/// 	&data.iter().flatten().copied().collect::<Vec<_>>(),
+/// 	data.len(),
+/// 	label,
+/// )
+/// .unwrap();
 /// ```
 ///
 /// ## from file
@@ -42,6 +47,13 @@ pub struct Dataset {
 	pub(crate) handle: lightgbm_sys::DatasetHandle,
 }
 
+impl Drop for Dataset {
+	fn drop(&mut self) {
+		lgbm_call!(lightgbm_sys::LGBM_DatasetFree(self.handle))
+			.expect("Call to LGBM_DatasetFree should always succeed");
+	}
+}
+
 impl Dataset {
 	fn new(handle: lightgbm_sys::DatasetHandle) -> Self {
 		Self { handle }
@@ -53,47 +65,71 @@ impl Dataset {
 	/// ```
 	/// use lightgbm::Dataset;
 	///
-	/// let data = vec![
-	/// 	vec![1.0, 0.1, 0.2, 0.1],
-	/// 	vec![0.7, 0.4, 0.5, 0.1],
-	/// 	vec![0.9, 0.8, 0.5, 0.1],
-	/// 	vec![0.2, 0.2, 0.8, 0.7],
-	/// 	vec![0.1, 0.7, 1.0, 0.9],
+	/// let data = &[
+	/// 	[1.0, 0.1, 0.2, 0.1],
+	/// 	[0.7, 0.4, 0.5, 0.1],
+	/// 	[0.9, 0.8, 0.5, 0.1],
+	/// 	[0.2, 0.2, 0.8, 0.7],
+	/// 	[0.1, 0.7, 1.0, 0.9],
 	/// ];
-	/// let label = vec![0.0, 0.0, 0.0, 1.0, 1.0];
-	/// let dataset = Dataset::from_mat(data, label).unwrap();
+	/// let label = &[0.0, 0.0, 0.0, 1.0, 1.0];
+	/// let dataset = Dataset::from_mat(
+	/// 	&data.iter().flatten().copied().collect::<Vec<_>>(),
+	/// 	data.len(),
+	/// 	label,
+	/// )
+	/// .unwrap();
 	/// ```
-	pub fn from_mat(data: Vec<Vec<f64>>, label: Vec<f32>) -> Result<Self> {
+	pub fn from_mat(data: &[f64], n_rows: usize, label: &[f32]) -> Result<Self> {
 		let data_length = data.len();
-		let feature_length = data[0].len();
+		if data.len() % n_rows != 0 {
+			return Err(Error::new(format!(
+				"data len is not multiple of n_rows ({n_rows}), but all rows \
+					should have the same number of features",
+			)));
+		}
+		let feature_length = data_length / n_rows;
+
+		let data_len = data_length
+			.try_into()
+			.map_err(|_| Error::new("data length doesn't fit into an i32"))?;
+		let nrow = data_length
+			.try_into()
+			.map_err(|_| Error::new("number of rows doesn't fit into an i32"))?;
+		let ncol = feature_length
+			.try_into()
+			.map_err(|_| Error::new("number of columns doesn't fit into an i32"))?;
+
 		let params =
 			CString::new("").map_err(|e| Error::from_other("failed to make cstring", e))?;
 		let label_str =
 			CString::new("label").map_err(|e| Error::from_other("failed to make cstring", e))?;
 		let reference = std::ptr::null_mut(); // not use
 		let mut handle = std::ptr::null_mut();
-		let flat_data = data.into_iter().flatten().collect::<Vec<_>>();
 
 		lgbm_call!(lightgbm_sys::LGBM_DatasetCreateFromMat(
-			flat_data.as_ptr() as *const c_void,
-			lightgbm_sys::C_API_DTYPE_FLOAT64 as i32,
-			data_length as i32,
-			feature_length as i32,
+			data.as_ptr() as *const c_void,
+			lightgbm_sys::C_API_DTYPE_FLOAT64,
+			nrow,
+			ncol,
 			1_i32,
 			params.as_ptr() as *const c_char,
 			reference,
 			&mut handle
 		))?;
+		// It is very important to create the dataset immediately after a successful call to avoid
+		// memory leak on subsequent error (as we rely on the drop impl of Dataset to be called)
+		let dataset = Self::new(handle);
 
 		lgbm_call!(lightgbm_sys::LGBM_DatasetSetField(
 			handle,
 			label_str.as_ptr() as *const c_char,
 			label.as_ptr() as *const c_void,
-			data_length as i32,
-			lightgbm_sys::C_API_DTYPE_FLOAT32 as i32
+			data_len,
+			lightgbm_sys::C_API_DTYPE_FLOAT32
 		))?;
 
-		Ok(Self::new(handle))
+		Ok(dataset)
 	}
 
 	/// Create a new `Dataset` from file.
@@ -129,7 +165,8 @@ impl Dataset {
 			std::ptr::null_mut(),
 			&mut handle
 		))?;
-
+		// It is very important to create the dataset immediately after a successful call to avoid
+		// memory leak on subsequent error (as we rely on the drop impl of Dataset to be called)
 		Ok(Self::new(handle))
 	}
 
@@ -203,13 +240,6 @@ impl Dataset {
 	}
 }
 
-impl Drop for Dataset {
-	fn drop(&mut self) {
-		lgbm_call!(lightgbm_sys::LGBM_DatasetFree(self.handle))
-			.expect("Call to LGBM_DatasetFree should always succeed");
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -224,15 +254,19 @@ mod tests {
 
 	#[test]
 	fn from_mat() {
-		let data = vec![
-			vec![1.0, 0.1, 0.2, 0.1],
-			vec![0.7, 0.4, 0.5, 0.1],
-			vec![0.9, 0.8, 0.5, 0.1],
-			vec![0.2, 0.2, 0.8, 0.7],
-			vec![0.1, 0.7, 1.0, 0.9],
+		let data = &[
+			[1.0, 0.1, 0.2, 0.1],
+			[0.7, 0.4, 0.5, 0.1],
+			[0.9, 0.8, 0.5, 0.1],
+			[0.2, 0.2, 0.8, 0.7],
+			[0.1, 0.7, 1.0, 0.9],
 		];
-		let label = vec![0.0, 0.0, 0.0, 1.0, 1.0];
-		let dataset = Dataset::from_mat(data, label);
+		let label = &[0.0, 0.0, 0.0, 1.0, 1.0];
+		let dataset = Dataset::from_mat(
+			&data.iter().flatten().copied().collect::<Vec<_>>(),
+			data.len(),
+			label,
+		);
 		assert!(dataset.is_ok());
 	}
 

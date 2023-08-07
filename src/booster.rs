@@ -99,15 +99,20 @@ impl Booster {
 	/// 	serde_json::json,
 	/// };
 	///
-	/// let data = vec![
-	/// 	vec![1.0, 0.1, 0.2, 0.1],
-	/// 	vec![0.7, 0.4, 0.5, 0.1],
-	/// 	vec![0.9, 0.8, 0.5, 0.1],
-	/// 	vec![0.2, 0.2, 0.8, 0.7],
-	/// 	vec![0.1, 0.7, 1.0, 0.9],
+	/// let data = &[
+	/// 	[1.0, 0.1, 0.2, 0.1],
+	/// 	[0.7, 0.4, 0.5, 0.1],
+	/// 	[0.9, 0.8, 0.5, 0.1],
+	/// 	[0.2, 0.2, 0.8, 0.7],
+	/// 	[0.1, 0.7, 1.0, 0.9],
 	/// ];
-	/// let label = vec![0.0, 0.0, 0.0, 1.0, 1.0];
-	/// let dataset = Dataset::from_mat(data, label).unwrap();
+	/// let label = &[0.0, 0.0, 0.0, 1.0, 1.0];
+	/// let dataset = Dataset::from_mat(
+	/// 	&data.iter().flatten().copied().collect::<Vec<_>>(),
+	/// 	data.len(),
+	/// 	label,
+	/// )
+	/// .unwrap();
 	/// let params = json! {
 	///    {
 	/// 		"num_iterations": 3,
@@ -282,10 +287,10 @@ impl Booster {
 
 		lgbm_call!(lightgbm_sys::LGBM_BoosterPredictForMatSingleRowFastInit(
 			self.handle,
-			lightgbm_sys::C_API_PREDICT_NORMAL as i32, // predict_type
-			0_i32,                                     // start_iteration
-			-1_i32,                                    // num_iteration
-			lightgbm_sys::C_API_DTYPE_FLOAT64 as i32,
+			lightgbm_sys::C_API_PREDICT_NORMAL, // predict_type
+			0_i32,                              // start_iteration
+			-1_i32,                             // num_iteration
+			lightgbm_sys::C_API_DTYPE_FLOAT64,
 			num_feature,
 			self.param_overrides.as_ptr() as *const c_char,
 			&mut handle,
@@ -397,9 +402,9 @@ impl Booster {
 		lgbm_call!(lightgbm_sys::LGBM_BoosterCalcNumPredict(
 			self.handle,
 			n_rows,
-			lightgbm_sys::C_API_PREDICT_NORMAL as i32, // predict_type
-			0_i32,                                     // start_iteration
-			-1_i32,                                    // num_iteration
+			lightgbm_sys::C_API_PREDICT_NORMAL, // predict_type
+			0_i32,                              // start_iteration
+			-1_i32,                             // num_iteration
 			&mut output_size
 		))?;
 		output_size
