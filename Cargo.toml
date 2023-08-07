@@ -13,7 +13,7 @@ exclude = [".gitignore", ".gitmodules", "examples", "lightgbm-sys"]
 lightgbm-sys = { path = "lightgbm-sys", default-features = false, version = "0.3.0" }
 libc = { version = "0.2.81", default-features = false }
 serde_json = "1.0.59"
-polars = {version = "0.16.0", optional = true}
+polars = { version = "0.16.0", optional = true }
 
 
 [features]
@@ -21,3 +21,4 @@ default = ["runtime"]
 dataframe = ["polars"]
 static = ["lightgbm-sys/static"]
 runtime = ["lightgbm-sys/runtime"]
+openmp = ["lightgbm-sys/openmp"]

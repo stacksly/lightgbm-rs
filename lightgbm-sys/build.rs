@@ -38,6 +38,14 @@ fn main() {
 		.profile("Release")
 		.uses_cxx11()
 		.define("BUILD_STATIC_LIB", "ON")
+		.define(
+			"USE_OPENMP",
+			if cfg!(feature = "openmp") {
+				"ON"
+			} else {
+				"OFF"
+			},
+		)
 		.build();
 
 	// bindgen build
@@ -56,13 +64,17 @@ fn main() {
 	// link to appropriate C++ lib
 	if target.contains("apple") {
 		println!("cargo:rustc-link-lib=c++");
-		println!("cargo:rustc-link-lib=dylib=omp");
-		if let Ok(homebrew_libomp_path) = get_homebrew_libpath("libomp") {
-			println!("cargo:rustc-link-search={}", homebrew_libomp_path);
+		if cfg!(feature = "openmp") {
+			println!("cargo:rustc-link-lib=dylib=omp");
+			if let Ok(homebrew_libomp_path) = get_homebrew_libpath("libomp") {
+				println!("cargo:rustc-link-search={}", homebrew_libomp_path);
+			}
 		}
 	} else if target.contains("linux") {
 		println!("cargo:rustc-link-lib=stdc++");
-		println!("cargo:rustc-link-lib=dylib=gomp");
+		if cfg!(feature = "openmp") {
+			println!("cargo:rustc-link-lib=dylib=gomp");
+		}
 	}
 
 	println!("cargo:rustc-link-search={}", out_path.join("lib").display());
