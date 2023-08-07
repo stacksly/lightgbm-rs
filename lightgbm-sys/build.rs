@@ -1,13 +1,7 @@
-extern crate bindgen;
-extern crate cmake;
-
-use {
-	cmake::Config,
-	std::{
-		env,
-		path::{Path, PathBuf},
-		process::Command,
-	},
+use std::{
+	env,
+	path::{Path, PathBuf},
+	process::Command,
 };
 
 fn main() {
@@ -40,7 +34,7 @@ fn main() {
 	}
 
 	// CMake
-	let dst = Config::new(&lgbm_root)
+	let dst = cmake::Config::new(&lgbm_root)
 		.profile("Release")
 		.uses_cxx11()
 		.define("BUILD_STATIC_LIB", "ON")
@@ -51,6 +45,7 @@ fn main() {
 		.header("wrapper.h")
 		.clang_args(&["-x", "c++", "-std=c++14"])
 		.clang_arg(format!("-I{}", lgbm_root.join("include").display()))
+		.default_macro_constant_type(bindgen::MacroTypeVariation::Signed)
 		.generate()
 		.expect("Unable to generate bindings");
 	let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());

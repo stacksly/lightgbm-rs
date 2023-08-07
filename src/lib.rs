@@ -8,10 +8,13 @@ macro_rules! lgbm_call {
 }
 
 mod error;
-pub use crate::error::{Error, Result};
+pub use error::{Error, Result};
 
 mod dataset;
-pub use crate::dataset::Dataset;
+pub use dataset::Dataset;
 
 mod booster;
-pub use crate::booster::Booster;
+pub use booster::Booster;
+
+mod single_row_predictor;
+pub use single_row_predictor::SingleRowPredictor;
