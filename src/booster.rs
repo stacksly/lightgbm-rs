@@ -314,7 +314,7 @@ impl Booster {
 		Ok(out_len)
 	}
 
-	fn _feature_names(&self, num_features: i32, feature_name_size: u64) -> Result<FeatureNames> {
+	fn _feature_names(&self, num_features: i32, feature_name_size: usize) -> Result<FeatureNames> {
 		let mut features = (0..num_features)
 			.map(|_| (0..feature_name_size).map(|_| 0).collect::<Vec<u8>>())
 			.collect::<Vec<_>>();
@@ -347,7 +347,7 @@ impl Booster {
 	pub fn feature_names(&self) -> Result<Vec<String>> {
 		let num_features = self.num_feature()?;
 
-		const DEFAULT_MAX_FEATURE_NAME_SIZE: u64 = 64;
+		const DEFAULT_MAX_FEATURE_NAME_SIZE: usize = 64;
 		let mut feature_result =
 			self._feature_names(num_features, DEFAULT_MAX_FEATURE_NAME_SIZE)?;
 
@@ -415,7 +415,7 @@ impl Booster {
 
 struct FeatureNames {
 	features: Vec<Vec<u8>>,
-	actual_feature_name_len: u64,
+	actual_feature_name_len: usize,
 	num_feature_names: i32,
 }
 
