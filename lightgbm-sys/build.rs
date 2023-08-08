@@ -5,36 +5,8 @@ use std::{
 };
 
 fn main() {
-	let target = env::var("TARGET").unwrap();
-	let out_dir = env::var("OUT_DIR").unwrap();
-	let lgbm_root = Path::new(&out_dir).join("lightgbm");
-
-	// copy source code
-	if !lgbm_root.exists() {
-		let status = if target.contains("windows") {
-			Command::new("cmd")
-				.args(&[
-					"/C",
-					"echo D | xcopy /S /Y lightgbm",
-					lgbm_root.to_str().unwrap(),
-				])
-				.status()
-		} else {
-			Command::new("cp")
-				.args(&["-r", "lightgbm", lgbm_root.to_str().unwrap()])
-				.status()
-		};
-		if let Some(err) = status.err() {
-			panic!(
-				"Failed to copy ./lightgbm to {}: {}",
-				lgbm_root.display(),
-				err
-			);
-		}
-	}
-
 	// CMake
-	let dst = cmake::Config::new(&lgbm_root)
+	let dst = cmake::Config::new("lightgbm")
 		.profile("Release")
 		.uses_cxx11()
 		.define("BUILD_STATIC_LIB", "ON")
@@ -49,20 +21,20 @@ fn main() {
 		.build();
 
 	// bindgen build
+	let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 	let bindings = bindgen::Builder::default()
 		.header("wrapper.h")
 		.clang_args(&["-x", "c++", "-std=c++14"])
-		.clang_arg(format!("-I{}", lgbm_root.join("include").display()))
+		.clang_arg(format!("-I{}", out_path.join("include").display()))
 		.default_macro_constant_type(bindgen::MacroTypeVariation::Signed)
 		.generate()
 		.expect("Unable to generate bindings");
-	let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 	bindings
 		.write_to_file(out_path.join("bindings.rs"))
 		.expect("Couldn't write bindings.");
 
 	// link to appropriate C++ lib
-	if target.contains("apple") {
+	if cfg!(target_os = "macos") {
 		println!("cargo:rustc-link-lib=c++");
 		if cfg!(feature = "openmp") {
 			println!("cargo:rustc-link-lib=dylib=omp");
@@ -70,7 +42,7 @@ fn main() {
 				println!("cargo:rustc-link-search={}", homebrew_libomp_path);
 			}
 		}
-	} else if target.contains("linux") {
+	} else if cfg!(target_os = "linux") {
 		println!("cargo:rustc-link-lib=stdc++");
 		if cfg!(feature = "openmp") {
 			println!("cargo:rustc-link-lib=dylib=gomp");
@@ -79,7 +51,8 @@ fn main() {
 
 	println!("cargo:rustc-link-search={}", out_path.join("lib").display());
 	println!("cargo:rustc-link-search=native={}", dst.display());
-	if target.contains("windows") {
+
+	if cfg!(target_os = "windows") {
 		println!("cargo:rustc-link-lib=static=lib_lightgbm");
 	} else {
 		println!("cargo:rustc-link-lib=static=_lightgbm");
