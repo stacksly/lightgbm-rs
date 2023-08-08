@@ -64,9 +64,9 @@ impl Booster {
 		Self::from_file_with_param_overrides(filename, "")
 	}
 
-	pub fn from_bytes_with_param_overrides(bytes: &[u8], param_overrides: &str) -> Result<Self> {
-		let str_bytes = CString::new(bytes)
-			.map_err(|e| Error::new(format!("Failed to create cstring: {}", e)))?;
+	pub fn from_string_with_param_overrides(string: &[u8], param_overrides: &str) -> Result<Self> {
+		let model_cstring = CString::new(string)
+			.map_err(|e| Error::new(format!("Failed to create cstring: {e}")))?;
 
 		let param_overrides = CString::new(param_overrides).map_err(|e| {
 			Error::new(format!("Failed to convert param_overrides to CString: {e}"))
@@ -76,7 +76,7 @@ impl Booster {
 		let mut handle = std::ptr::null_mut();
 
 		lgbm_call!(lightgbm_sys::LGBM_BoosterLoadModelFromString(
-			str_bytes.as_ptr() as *const c_char,
+			model_cstring.as_ptr() as *const c_char,
 			&mut out_num_iterations,
 			&mut handle
 		))?;
@@ -85,8 +85,8 @@ impl Booster {
 		Ok(Booster::new(handle, param_overrides))
 	}
 
-	pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-		Self::from_bytes_with_param_overrides(bytes, "")
+	pub fn from_string(bytes: &[u8]) -> Result<Self> {
+		Self::from_string_with_param_overrides(bytes, "")
 	}
 
 	/// Create a new Booster model with given Dataset and parameters.
@@ -304,6 +304,22 @@ impl Booster {
 		})
 	}
 
+	/// Get the size of the output array that will be required for this prediction
+	pub(crate) fn predict_output_len(&self, n_rows: i32) -> Result<usize> {
+		let mut output_size: i64 = 0;
+		lgbm_call!(lightgbm_sys::LGBM_BoosterCalcNumPredict(
+			self.handle,
+			n_rows,
+			lightgbm_sys::C_API_PREDICT_NORMAL, // predict_type
+			0_i32,                              // start_iteration
+			-1_i32,                             // num_iteration
+			&mut output_size
+		))?;
+		output_size
+			.try_into()
+			.map_err(|_| Error::new("Output size returned by LGBM C API doesn't fit in a usize"))
+	}
+
 	/// Get Feature Num.
 	pub fn num_feature(&self) -> Result<i32> {
 		let mut out_len = 0;
@@ -396,20 +412,45 @@ impl Booster {
 		Ok(())
 	}
 
-	/// Get the size of the output array that will be required for this prediction
-	pub(crate) fn predict_output_len(&self, n_rows: i32) -> Result<usize> {
-		let mut output_size: i64 = 0;
-		lgbm_call!(lightgbm_sys::LGBM_BoosterCalcNumPredict(
+	/// Save model to string. This returns the same content that `save_file` writes into a file.
+	pub fn save_string(&self) -> Result<Vec<u8>> {
+		// get nessesary buffer size
+		let mut out_size = 0_i64;
+		lgbm_call!(lightgbm_sys::LGBM_BoosterSaveModelToString(
 			self.handle,
-			n_rows,
-			lightgbm_sys::C_API_PREDICT_NORMAL, // predict_type
-			0_i32,                              // start_iteration
-			-1_i32,                             // num_iteration
-			&mut output_size
+			0_i32,
+			-1_i32,
+			0_i32,
+			0,
+			&mut out_size as *mut _,
+			std::ptr::null_mut() as *mut i8
 		))?;
-		output_size
-			.try_into()
-			.map_err(|_| Error::new("Output size returned by LGBM C API doesn't fit in a usize"))
+
+		// write data to buffer and convert
+		let mut buffer = vec![
+			0u8;
+			out_size.try_into().map_err(|_| Error::new(
+				"string size returned by C API is negative"
+			))?
+		];
+		lgbm_call!(lightgbm_sys::LGBM_BoosterSaveModelToString(
+			self.handle,
+			0_i32,
+			-1_i32,
+			0_i32,
+			out_size,
+			&mut out_size as *mut _,
+			buffer.as_mut_ptr() as *mut c_char
+		))?;
+
+		if buffer.pop() != Some(0) {
+			// this should never happen, unless lightgbm has a bug
+			panic!("write out of bounds happened in lightgbm call");
+		}
+
+		let cstring = CString::new(buffer)
+			.map_err(|e| Error::from_other("Parsing CString returned by C API failed", e))?;
+		Ok(cstring.into_bytes())
 	}
 }
 
@@ -558,13 +599,27 @@ mod tests {
 	}
 
 	#[test]
+	fn save_string() {
+		let params = _default_params();
+		let bst = _train_booster(&params);
+		let filename = "./test/test_save_string.output";
+		assert_eq!(bst.save_file(&filename), Ok(()));
+		assert!(Path::new(&filename).exists());
+		let booster_file_content = fs::read(&filename).unwrap();
+		let _ = fs::remove_file("./test/test_save_file.output");
+
+		assert!(!booster_file_content.is_empty());
+		assert_eq!(Ok(booster_file_content), bst.save_string())
+	}
+
+	#[test]
 	fn from_file() {
 		let _ = Booster::from_file("./test/test_from_file.input").unwrap();
 	}
 
 	#[test]
-	fn from_bytes() {
+	fn from_string() {
 		let file = fs::read_to_string("./test/test_from_file.input").unwrap();
-		let _ = Booster::from_bytes(file.as_bytes()).unwrap();
+		let _ = Booster::from_string(file.as_bytes()).unwrap();
 	}
 }
