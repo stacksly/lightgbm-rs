@@ -452,6 +452,47 @@ impl Booster {
 			.map_err(|e| Error::from_other("Parsing CString returned by C API failed", e))?;
 		Ok(cstring.into_bytes())
 	}
+
+	/// Save model to string. This returns the same content that `save_file` writes into a file.
+	pub fn dump_model_json(&self) -> Result<Vec<u8>> {
+		// get nessesary buffer size
+		let mut out_size = 0_i64;
+		lgbm_call!(lightgbm_sys::LGBM_BoosterDumpModel(
+			self.handle,
+			0_i32,
+			-1_i32,
+			0_i32,
+			0,
+			&mut out_size as *mut _,
+			std::ptr::null_mut() as *mut i8
+		))?;
+
+		// write data to buffer and convert
+		let mut buffer = vec![
+			0u8;
+			out_size.try_into().map_err(|_| Error::new(
+				"string size returned by C API is negative"
+			))?
+		];
+		lgbm_call!(lightgbm_sys::LGBM_BoosterDumpModel(
+			self.handle,
+			0_i32,
+			-1_i32,
+			0_i32,
+			out_size,
+			&mut out_size as *mut _,
+			buffer.as_mut_ptr() as *mut c_char
+		))?;
+
+		if buffer.pop() != Some(0) {
+			// this should never happen, unless lightgbm has a bug
+			panic!("write out of bounds happened in lightgbm call");
+		}
+
+		let cstring = CString::new(buffer)
+			.map_err(|e| Error::from_other("Parsing CString returned by C API failed", e))?;
+		Ok(cstring.into_bytes())
+	}
 }
 
 struct FeatureNames {
@@ -606,7 +647,7 @@ mod tests {
 		assert_eq!(bst.save_file(&filename), Ok(()));
 		assert!(Path::new(&filename).exists());
 		let booster_file_content = fs::read(&filename).unwrap();
-		let _ = fs::remove_file("./test/test_save_file.output");
+		let _ = fs::remove_file("./test/test_save_string.output");
 
 		assert!(!booster_file_content.is_empty());
 		assert_eq!(Ok(booster_file_content), bst.save_string())
@@ -621,5 +662,204 @@ mod tests {
 	fn from_string() {
 		let file = fs::read_to_string("./test/test_from_file.input").unwrap();
 		let _ = Booster::from_string(file.as_bytes()).unwrap();
+	}
+
+	#[test]
+	fn dump_model_json() {
+		let params = _default_params();
+		let bst = _train_booster(&params);
+		let json_dump = String::from_utf8(bst.dump_model_json().expect("Failed to dump model"))
+			.expect("Failed to convert JSON dump to string");
+
+		let sjv = serde_json::from_str::<serde_json::Value>(&json_dump).unwrap();
+
+		assert_eq!(
+			sjv,
+			json!({
+			  "average_output": false,
+			  "feature_importances": {},
+			  "feature_infos": {
+				"Column_0": {
+				  "max_value": 6.695,
+				  "min_value": 0.275,
+				  "values": []
+				},
+				"Column_1": {
+				  "max_value": 2.43,
+				  "min_value": -2.417,
+				  "values": []
+				},
+				"Column_10": {
+				  "max_value": 2.909,
+				  "min_value": -2.904,
+				  "values": []
+				},
+				"Column_11": {
+				  "max_value": 1.743,
+				  "min_value": -1.742,
+				  "values": []
+				},
+				"Column_12": {
+				  "max_value": 2.215,
+				  "min_value": 0,
+				  "values": []
+				},
+				"Column_13": {
+				  "max_value": 6.523,
+				  "min_value": 0.264,
+				  "values": []
+				},
+				"Column_14": {
+				  "max_value": 2.727,
+				  "min_value": -2.728,
+				  "values": []
+				},
+				"Column_15": {
+				  "max_value": 1.742,
+				  "min_value": -1.742,
+				  "values": []
+				},
+				"Column_16": {
+				  "max_value": 2.548,
+				  "min_value": 0,
+				  "values": []
+				},
+				"Column_17": {
+				  "max_value": 6.068,
+				  "min_value": 0.365,
+				  "values": []
+				},
+				"Column_18": {
+				  "max_value": 2.496,
+				  "min_value": -2.495,
+				  "values": []
+				},
+				"Column_19": {
+				  "max_value": 1.743,
+				  "min_value": -1.74,
+				  "values": []
+				},
+				"Column_2": {
+				  "max_value": 1.743,
+				  "min_value": -1.743,
+				  "values": []
+				},
+				"Column_20": {
+				  "max_value": 3.102,
+				  "min_value": 0,
+				  "values": []
+				},
+				"Column_21": {
+				  "max_value": 13.098,
+				  "min_value": 0.172,
+				  "values": []
+				},
+				"Column_22": {
+				  "max_value": 7.392,
+				  "min_value": 0.419,
+				  "values": []
+				},
+				"Column_23": {
+				  "max_value": 3.682,
+				  "min_value": 0.461,
+				  "values": []
+				},
+				"Column_24": {
+				  "max_value": 6.583,
+				  "min_value": 0.384,
+				  "values": []
+				},
+				"Column_25": {
+				  "max_value": 7.86,
+				  "min_value": 0.09300000000000001,
+				  "values": []
+				},
+				"Column_26": {
+				  "max_value": 4.543,
+				  "min_value": 0.389,
+				  "values": []
+				},
+				"Column_27": {
+				  "max_value": 4.316,
+				  "min_value": 0.489,
+				  "values": []
+				},
+				"Column_3": {
+				  "max_value": 5.7,
+				  "min_value": 0.019,
+				  "values": []
+				},
+				"Column_4": {
+				  "max_value": 1.743,
+				  "min_value": -1.743,
+				  "values": []
+				},
+				"Column_5": {
+				  "max_value": 4.19,
+				  "min_value": 0.159,
+				  "values": []
+				},
+				"Column_6": {
+				  "max_value": 2.97,
+				  "min_value": -2.941,
+				  "values": []
+				},
+				"Column_7": {
+				  "max_value": 1.741,
+				  "min_value": -1.741,
+				  "values": []
+				},
+				"Column_8": {
+				  "max_value": 2.173,
+				  "min_value": 0,
+				  "values": []
+				},
+				"Column_9": {
+				  "max_value": 5.193,
+				  "min_value": 0.19,
+				  "values": []
+				}
+			  },
+			  "feature_names": [
+				"Column_0",
+				"Column_1",
+				"Column_2",
+				"Column_3",
+				"Column_4",
+				"Column_5",
+				"Column_6",
+				"Column_7",
+				"Column_8",
+				"Column_9",
+				"Column_10",
+				"Column_11",
+				"Column_12",
+				"Column_13",
+				"Column_14",
+				"Column_15",
+				"Column_16",
+				"Column_17",
+				"Column_18",
+				"Column_19",
+				"Column_20",
+				"Column_21",
+				"Column_22",
+				"Column_23",
+				"Column_24",
+				"Column_25",
+				"Column_26",
+				"Column_27"
+			  ],
+			  "label_index": 0,
+			  "max_feature_idx": 27,
+			  "monotone_constraints": [],
+			  "name": "tree",
+			  "num_class": 1,
+			  "num_tree_per_iteration": 1,
+			  "objective": "binary sigmoid:1",
+			  "tree_info": [],
+			  "version": "v4"
+			})
+		);
 	}
 }
