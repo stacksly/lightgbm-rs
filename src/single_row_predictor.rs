@@ -13,6 +13,9 @@ pub struct SingleRowPredictor<'a> {
 }
 
 unsafe impl Send for SingleRowPredictor<'_> {}
+// Although it *technically* is also `Sync`, there's actually much overhead if it's used
+// in parallel across threads due to cached resources being behind a mutex, so it is recommended to
+// just create one per user thread. Mutex is inexpensive if there is no contention.
 
 impl Drop for SingleRowPredictor<'_> {
 	fn drop(&mut self) {
