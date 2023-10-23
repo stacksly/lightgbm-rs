@@ -16,6 +16,8 @@ use crate::{Dataset, Error, Result, SingleRowPredictor};
 pub struct Booster {
 	handle: lightgbm_sys::BoosterHandle,
 	pub(crate) param_overrides: CString,
+	/// This is necessary because of https://github.com/microsoft/LightGBM/issues/6142
+	race_workaround_mutex: std::sync::Mutex<()>,
 }
 
 // LGBM_BoosterPredictForMat is always thread-safe
@@ -35,6 +37,7 @@ impl Booster {
 		Booster {
 			handle,
 			param_overrides,
+			race_workaround_mutex: std::sync::Mutex::new(()),
 		}
 	}
 
@@ -190,7 +193,10 @@ impl Booster {
 	///
 	/// There is one entry per class for each line in the output vector.
 	/// `output.chunks(output.len() / n_rows)` gives the output for each line.
-	pub fn predict(&self, data: &[f64]) -> Result<Vec<f64>> {
+	///
+	/// This takes &mut because there's currently a data race in LightGBM:
+	/// [#6142](https://github.com/microsoft/LightGBM/issues/6142)
+	pub fn predict(&mut self, data: &[f64]) -> Result<Vec<f64>> {
 		if data.is_empty() {
 			return Ok(Vec::new());
 		}
@@ -280,6 +286,11 @@ impl Booster {
 		let input_size: usize = num_feature.try_into().map_err(|_| {
 			Error::new("Number of features returned by LGBM C API doesn't fit in a usize")
 		})?;
+
+		// https://github.com/microsoft/LightGBM/issues/6142
+		// Because at lower level atomic operations don't actually point to the data that needs to
+		// be synchronized, this fixes the issue.
+		let _guard = self.race_workaround_mutex.lock().unwrap();
 
 		let output_size = self.predict_output_len(1)?;
 
@@ -540,7 +551,7 @@ mod tests {
 				"data_random_seed": 0
 			}
 		};
-		let bst = _train_booster(&params);
+		let mut bst = _train_booster(&params);
 		let features = [[0.5; 28], [0.0; 28], [0.9; 28]]
 			.into_iter()
 			.flatten()
