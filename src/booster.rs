@@ -16,8 +16,6 @@ use crate::{Dataset, Error, Result, SingleRowPredictor};
 pub struct Booster {
 	handle: lightgbm_sys::BoosterHandle,
 	pub(crate) param_overrides: CString,
-	/// This is necessary because of https://github.com/microsoft/LightGBM/issues/6142
-	race_workaround_mutex: std::sync::Mutex<()>,
 }
 
 // LGBM_BoosterPredictForMat is always thread-safe
@@ -37,7 +35,6 @@ impl Booster {
 		Booster {
 			handle,
 			param_overrides,
-			race_workaround_mutex: std::sync::Mutex::new(()),
 		}
 	}
 
@@ -286,11 +283,6 @@ impl Booster {
 		let input_size: usize = num_feature.try_into().map_err(|_| {
 			Error::new("Number of features returned by LGBM C API doesn't fit in a usize")
 		})?;
-
-		// https://github.com/microsoft/LightGBM/issues/6142
-		// Because at lower level atomic operations don't actually point to the data that needs to
-		// be synchronized, this fixes the issue.
-		let _guard = self.race_workaround_mutex.lock().unwrap();
 
 		let output_size = self.predict_output_len(1)?;
 
