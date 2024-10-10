@@ -10,7 +10,7 @@ readme = "README.md"
 exclude = [".gitignore", ".gitmodules", "examples", "lightgbm-sys"]
 
 [dependencies]
-lightgbm-sys = { path = "lightgbm-sys", default-features = false, version = "0.3.0" }
+lightgbm-sys = { path = "lightgbm-sys", version = "0.3.0" }
 libc = { version = "0.2.81", default-features = false }
 serde_json = "1.0.59"
 polars = { version = "0.16.0", optional = true }
